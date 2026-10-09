@@ -1,118 +1,129 @@
 ---
-title: "Chapter 1 · My EDA project"
+title: "Electricity production, consumption and exchanges across French regions"
+subtitle: "Chapter 1 · Exploratory analysis of éCO2mix regional data"
 author: "Florian Escaffre"
 date: today
+lang: en
+format:
+  html:
+    toc: true
+    toc-title: "Contents"
+    number-sections: false
+    theme: cosmo
+    embed-resources: true
+    df-print: paged
+    fig-align: center
+execute:
+  echo: false
+  warning: false
+  message: false
 ---
-
-> **How to fill this chapter in**
-> This is your main portfolio piece. The numbered sections below follow the
-> **IMRAD** structure of research: question ≈ *introduction*, getting the
-> data + cleaning decisions ≈ *methods*, plotting the story ≈ *results*, and
-> findings ≈ *discussion*. In the *Reproducible Workflows* course:
->
-> - **Session 2** lab: find a dataset you care about on an open-data portal
->   (data.gouv.fr or your own country's), source it **reproducibly by code**,
->   run an EDA, clean the data, and commit it to git.
-> - **Session 3** work block: finish and polish the chapter, pin your data and
->   environment, open a pull request for review, and publish the book to a URL.
->
-> Everything between the `TODO` markers below is a template to replace with
-> your own content.
-
-## The question
-
-<!-- TODO: In a sentence or two, what question are you trying to answer with this dataset?  -->
-
-## Getting the data
-
-The data is sourced **by code** from an open-data portal of your choice. Because
-the download lives inside the document, it is recorded in the analysis itself;
-anyone who re-renders this document gets the same data and the same results.
-Record the dataset's **publisher and URL** in the text so the provenance is
-explicit.
-
-The only portal-specific part is the *fetch*. This template shows two ways;
-use the one that fits your portal:
-
-- **`{rdatagouv}`** (data.gouv.fr only, optional): search/download from R.
-- **Any portal by URL**: `download.file()` works with any portal's direct
-  download link.
 
 ```{r}
 #| label: setup
-#| message: false
-# Load what you use. {rdatagouv} only if you're on data.gouv.fr and want it.
-library(rdatagouv)    # search / download datasets from data.gouv.fr
-library(janitor)        # clean column names, tabulate with tabyl()
-library(naniar)         # visualise missing values
-library(skimr)
-library(dplyr) 
-library(tidyverse)       # one-line data summary with skim()
+#| include: false
+
+library(janitor)     # clean column names
+library(skimr)       # quick data summaries
+library(tidyverse)   # dplyr, tidyr, ggplot2, lubridate, ...
+library(sf)          # maps
+
+theme_set(theme_minimal())
+
+# Energy sources (columns of the dataset) and their groups
+source_cols    <- c("thermal_mw", "nuclear_mw", "hydro_mw",
+                    "wind_mw", "solar_mw", "bioenergy_mw")
+renewable_cols <- c("hydro_mw", "wind_mw", "solar_mw", "bioenergy_mw")
+
+source_labels <- c(
+  "nuclear_mw"   = "Nuclear",
+  "thermal_mw"   = "Thermal (fossil)",
+  "wind_mw"      = "Wind",
+  "solar_mw"     = "Solar",
+  "hydro_mw"     = "Hydro",
+  "bioenergy_mw" = "Bioenergy"
+)
+
+source_colors <- c(
+  "nuclear_mw"   = "#F4A300",   # orange (common RTE/IEA convention)
+  "thermal_mw"   = "#8B0000",   # dark red (fossil)
+  "wind_mw"      = "#87CEEB",   # sky blue
+  "solar_mw"     = "#FFD700",   # yellow (sun)
+  "hydro_mw"     = "#0047AB",   # dark blue (water)
+  "bioenergy_mw" = "#556B2F"    # olive green
+)
+
+# Helpers used to write numbers computed from the data directly in the text
+fmt_pct   <- function(x, digits = 0) paste0(formatC(x, format = "f", digits = digits), " %")
+fmt_mw    <- function(x) paste(formatC(x, format = "f", digits = 0, big.mark = ","), "MW")
+fmt_month <- function(d) paste(month.name[lubridate::month(d)], lubridate::year(d))
+fmt_list  <- function(x) {
+  if (length(x) == 0) "none" else knitr::combine_words(x, and = " and ", oxford_comma = FALSE)
+}
 ```
+
+# Introduction
+
+Electricity cannot be stored at scale, so production must match consumption at
+every instant, with imports and exports balancing regional gaps. France's mix is
+dominated by nuclear, complemented by hydro, thermal and variable renewables
+(wind, solar), but it differs widely from one region to another.
+
+This exploratory analysis uses the **éCO2mix regional** dataset published by RTE,
+the French transmission system operator, on the ODRÉ open-data portal
+(`odre.opendatasoft.com`, "éCO2mix régional consolidé et définitif"), at
+half-hourly resolution. The data is read from a local versioned copy (`pins`), so
+every render uses exactly the same data.
+
+## Research question
+
+> **Do French regions produce the electricity they consume, with which mix, and how
+> does this vary across seasons and over time?**
+
+1. Which source dominates each region's production?
+2. Which regions cover their consumption, and which depend on others?
+3. Does the mix change with the season and over the period?
+4. Do regions with nuclear power differ in their exchanges and thermal use?
+
+# Data
 
 ```{r}
 #| label: download
-#| message: false
-board <- pins::board_folder("data/", versioned = TRUE)
+
+board <- pins::board_folder("../data", versioned = TRUE)
 ds <- pins::pin_read(board, "eco2mix_regional")
 ```
 
-## A first look
+## First look
+
+The raw dataset has **`r format(nrow(ds), big.mark = " ")` rows** and
+**`r ncol(ds)` columns**. The summary below shows mistyped columns (text instead of
+numbers) and several very incomplete ones.
 
 ```{r}
 #| label: skim
-#| fig-cap: "A one-line summary of the dataset."
-# The skim() output gives you type, missingness and distributions at a glance.
+
 ds |> 
-  skimr::skim() 
-```
-
-```{r}
-#| label: missingness
-#| fig-cap: "Missing values across variables."
-#vis_miss(ds, "warn_large_data" = FALSE) #— where is data missing, and why might that be?
-
-# datset too big to use vis_miss
+  skimr::skim_without_charts()
 ```
 
 ## Cleaning decisions {#sec-cleaning}
 
-<!-- TODO: document the decisions you made while cleaning the data. What did you
-rename, recode, or drop, and why? A defensible cleaning decision is a feature
-of a good analysis, not an afterthought. -->
+- **Empty rows dropped:** the first 12 rows have no consumption and are empty on
+  every column.
+- **Battery storage columns dropped:** they only contain `NA` and `0`.
+- **Types fixed:** numeric variables had been read as text.
+- **Time columns:** `hour_local` is in local time while `datetime_utc` is in UTC,
+  and `datetime_utc` is missing at the spring and autumn clock changes. These rows
+  are kept for regional aggregates and excluded when grouping by instant.
+- **`tco` / `tch` columns:** more than half missing and not used here.
+- **Column names:** translated to English.
 
 ```{r}
-#| label: justif-drop-na-consommation
+#| label: cleaning
+#| output: false
 
-ds |> 
-  janitor::clean_names() |>
-  filter(is.na(consommation_mw)) |> 
-  nrow()
-
-ds |> 
-  janitor::clean_names() |>
-  mutate(rang = row_number()) |> 
-  filter(is.na(consommation_mw)) |> 
-  pull(rang)
-```
-```{r}
-#| label: justif-drop-stockage-batterie
-
-ds |> 
-  janitor::clean_names() |> 
-  summarise(
-    valeurs_uniques_stockage = list(unique(stockage_batterie)),
-    valeurs_uniques_destockage = list(unique(destockage_batterie))
-  )
-```
-
-Vérifier les colonnes relatives au stockage des baterries : seulement des NA et 0
-Décalage de 1h entre les colonnes date, heure et date_heure + missing values in date_heure : decision to trop the column date_heure
-Erreur de détection de types des colonnes (str au lieu de double par exemple)
-Les 12 premières lignes sont les seules avec des NA sur la consommation en MW, et des NA sur toutes les colonnes : dropped
-
-```{r}
-# Clean names, drop empty column, fix column type
+# Clean names, drop empty columns, fix types, translate names
 ds_clean <- ds |> 
   janitor::clean_names() |>
   janitor::remove_empty(which = "cols") |> 
@@ -127,403 +138,611 @@ ds_clean <- ds |>
       .fns = as.double
     )
   ) |> 
-  tidyr::drop_na("consommation_mw")
+  tidyr::drop_na("consommation_mw") |> 
+  rename(
+    hour_local            = heure,
+    datetime_utc          = date_heure,
+    region_code           = code_insee_region,
+    consumption_mw        = consommation_mw,
+    thermal_mw            = thermique_mw,
+    nuclear_mw            = nucleaire_mw,
+    wind_mw               = eolien_mw,
+    solar_mw              = solaire_mw,
+    hydro_mw              = hydraulique_mw,
+    bioenergy_mw          = bioenergies_mw,
+    physical_exchanges_mw = ech_physiques_mw
+  )
 ```
 
-```{r}
-#| label: justif-fuseaux-date-heure
-
-lubridate::tz(ds_clean$date_heure)
-
-ds_clean |> 
-  mutate(
-    heure_num = as.numeric(hms::as_hms(heure)) / 3600,
-    heure_utc_num = lubridate::hour(date_heure) + lubridate::minute(date_heure)/60,
-    diff = (heure_num - heure_utc_num) %% 24
-  ) |> 
-  count(diff)
-```
-```{r}
-ds_clean |> 
-  filter(is.na(date_heure) | is.na(heure)) |> 
-  count(date) |> 
-  arrange(desc(n))
-```
-
-```{r}
-ds_clean |> 
-  filter(is.na(date_heure)) |> 
-  count(heure, region)
-```
-Missing values of date_heure of the hours corresponding to hour change in autumn and summer of each year : drop?
-More than 50% of missing values on the tco and tch columns : need to drop ? / can they be useful ?
-
+After cleaning, the dataset has **`r format(nrow(ds_clean), big.mark = " ")` rows**
+covering **`r format(min(ds_clean$date), "%d/%m/%Y")`** to
+**`r format(max(ds_clean$date), "%d/%m/%Y")`**.
 
 ```{r}
 #| label: skim2
-#| fig-cap: "A one-line summary of the cleaned dataset."
-# The skim() output gives you type, missingness and distributions at a glance.
+
 ds_clean |> 
-  skimr::skim() 
+  skimr::skim_without_charts()
 ```
 
+# Analysis
 
+## Energy mix by region
 
-## Plotting the story
+This section answers the first question: which source dominates each region's
+production? @fig-region-mix shows, for every region, how its total production over
+the whole period splits between the six sources (each bar adds up to 100 %).
 
-<!-- TODO: replace with your figures. Give every figure a caption and refer to
-it in the text (e.g. "Fig. 1 shows that …"). If a figure uses randomness
-(sampling, jitter, a simulation), fix the seed *inside* that cell with
-`withr::with_seed(2025, { ... })` so the figure is identical on every render. -->
-
-### Energy mix by region
 ```{r}
-#| label: mix-par-region
+#| label: region-mix
 
-mix_region <- ds_clean |> 
-  select(region, thermique_mw, nucleaire_mw, eolien_mw, solaire_mw, 
-         hydraulique_mw, bioenergies_mw) |> 
-  pivot_longer(-region, names_to = "filiere", values_to = "mw") |> 
-  group_by(region, filiere) |> 
-  summarise(prod_totale = sum(mw, na.rm = TRUE), .groups = "drop_last") |> 
-  mutate(part_pct = prod_totale / sum(prod_totale) * 100) |> 
+region_mix <- ds_clean |> 
+  select(region, all_of(source_cols)) |> 
+  pivot_longer(-region, names_to = "energy_source", values_to = "mw") |> 
+  group_by(region, energy_source) |> 
+  summarise(total_prod = sum(mw, na.rm = TRUE), .groups = "drop_last") |> 
+  mutate(share_pct = total_prod / sum(total_prod) * 100) |> 
   ungroup()
 
-mix_region
-```
-
-```{r}
-#| label: viz-mix-par-region
-
-couleurs_filieres <- c(
-  "nucleaire_mw" = "#F4A300",     # orange (convention RTE/IEA courante)
-  "thermique_mw" = "#8B0000",     # rouge foncé (fossile)
-  "eolien_mw" = "#87CEEB",        # bleu ciel
-  "solaire_mw" = "#FFD700",       # jaune (soleil)
-  "hydraulique_mw" = "#0047AB",   # bleu foncé (eau)
-  "bioenergies_mw" = "#556B2F"    # vert olive
-)
-
-mix_region |> 
-  ggplot(aes(x = region, y = part_pct, fill = filiere)) +
-  geom_col() +
-  coord_flip() +
-  scale_fill_manual(
-    values = couleurs_filieres,
-    labels = c(
-      "nucleaire_mw" = "Nucléaire",
-      "thermique_mw" = "Thermique (fossile)",
-      "eolien_mw" = "Éolien",
-      "solaire_mw" = "Solaire",
-      "hydraulique_mw" = "Hydraulique",
-      "bioenergies_mw" = "Bioénergies"
-    )
-  ) +
-  labs(title = "Répartition du mix de production par région",
-       x = NULL, y = "Part (%)", fill = "Filière") +
-  theme_minimal()
-```
-
-```{r}
-#| label: filiere-dominante-par-region
-
-profil_region <- mix_region |> 
+region_profile <- region_mix |> 
   group_by(region) |> 
-  slice_max(part_pct, n = 1) |> 
+  slice_max(share_pct, n = 1, with_ties = FALSE) |> 
   ungroup() |> 
   mutate(
-    categorie = case_when(
-      filiere == "nucleaire_mw" ~ "Nucléaire",
-      filiere %in% c("eolien_mw", "solaire_mw", "hydraulique_mw", "bioenergies_mw") ~ "Renouvelable",
-      filiere == "thermique_mw" ~ "Fossile",
-      TRUE ~ "Autre"
+    category = case_when(
+      energy_source == "nuclear_mw"             ~ "Nuclear",
+      energy_source %in% renewable_cols         ~ "Renewable",
+      energy_source == "thermal_mw"             ~ "Fossil",
+      TRUE                                      ~ "Other"
     )
   )
 
-profil_region
+# Figures quoted in the text
+n_reg <- nrow(region_profile)
+n_nuc <- sum(region_profile$category == "Nuclear")
+n_ren <- sum(region_profile$category == "Renewable")
+n_fos <- sum(region_profile$category == "Fossil")
+
+most_conc <- region_profile |> slice_max(share_pct, n = 1, with_ties = FALSE)
+most_div  <- region_profile |> slice_min(share_pct, n = 1, with_ties = FALSE)
+top_nuc   <- region_mix |> filter(energy_source == "nuclear_mw") |> 
+  slice_max(share_pct, n = 1, with_ties = FALSE)
 ```
 
 ```{r}
-#| label: chargement-fond-carte
-#| message: false
+#| label: fig-region-mix
+#| fig-cap: "Production mix by region (share of each source, %)."
+#| fig-height: 6
 
-library(sf)
+region_mix |> 
+  ggplot(aes(x = region, y = share_pct, fill = energy_source)) +
+  geom_col() +
+  coord_flip() +
+  scale_fill_manual(values = source_colors, labels = source_labels) +
+  labs(title = "Production mix by region",
+       x = NULL, y = "Share (%)", fill = "Source")
+```
+
+Nuclear is the leading source in **`r n_nuc` of `r n_reg` regions**, renewables in
+**`r n_ren`** and fossil thermal in **`r n_fos`**. Nuclear reaches
+`r fmt_pct(top_nuc$share_pct)` of production in `r top_nuc$region`. The most
+concentrated mix is that of `r most_conc$region`, where
+`r source_labels[[most_conc$energy_source]]` alone supplies
+`r fmt_pct(most_conc$share_pct)`; the most diversified is that of
+`r most_div$region`, where the leading source
+(`r source_labels[[most_div$energy_source]]`) reaches only
+`r fmt_pct(most_div$share_pct)`.
+
+To locate these profiles, @fig-map-dominant-source maps the leading source of each
+region and @fig-map-category groups them into nuclear, renewable and fossil
+(overseas regions are absent from the dataset).
+
+```{r}
+#| label: load-map
+#| output: false
 
 regions_geo <- sf::st_read(
   "https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/regions.geojson",
   quiet = TRUE
 )
-
-names(regions_geo)
-```
-```{r}
-#| label: verif-noms-regions
-
-# Vérifier que les noms de région matchent entre les deux sources avant la jointure
-regions_geo |> pull(nom) |> sort()
-profil_region |> pull(region) |> sort()
 ```
 
 ```{r}
-#| label: viz-carte-filiere-precise
+#| label: fig-map-dominant-source
+#| fig-cap: "Dominant production source by region (detail of the six sources)."
 
-carte_filiere <- regions_geo |> 
+map_source <- regions_geo |> 
   left_join(
-    mix_region |> group_by(region) |> slice_max(part_pct, n = 1) |> ungroup(),
+    region_profile |> select(region, energy_source),
     by = c("nom" = "region")
   )
 
-carte_filiere |> 
-  ggplot(aes(fill = filiere)) +
+map_source |> 
+  ggplot(aes(fill = energy_source)) +
   geom_sf(color = "white", linewidth = 0.3) +
-  scale_fill_manual(values = couleurs_filieres, na.value = "grey85") +
-  labs(title = "Filière de production dominante par région (détail)", fill = "Filière") +
-  theme_minimal() +
+  scale_fill_manual(values = source_colors, labels = source_labels, na.value = "grey85") +
+  labs(title = "Dominant production source by region", fill = "Source") +
   theme(axis.text = element_blank(), axis.ticks = element_blank())
 ```
 
 ```{r}
-#| label: jointure-carte-mix
+#| label: fig-map-category
+#| fig-cap: "Dominant production category by region: nuclear, renewable or fossil."
 
-carte_profil <- regions_geo |> 
-  filter(nom %in% profil_region$region) |>   # exclut les DOM-TOM absents du dataset éCO2mix
-  left_join(profil_region, by = c("nom" = "region"))
+map_category <- regions_geo |> 
+  filter(nom %in% region_profile$region) |>   # overseas regions are absent from the dataset
+  left_join(region_profile, by = c("nom" = "region"))
 
-# Vérifier qu'aucune région ne s'est perdue en route
-carte_profil |> filter(is.na(categorie))
-```
-
-```{r}
-#| label: viz-carte-profil-region
-
-carte_profil |> 
-  ggplot(aes(fill = categorie)) +
+map_category |> 
+  ggplot(aes(fill = category)) +
   geom_sf(color = "white", linewidth = 0.3) +
   scale_fill_manual(
-    values = c("Nucléaire" = "#F4A300", "Renouvelable" = "#2E8B57", "Fossile" = "#8B0000")
+    values = c("Nuclear" = "#F4A300", "Renewable" = "#2E8B57", "Fossil" = "#8B0000")
   ) +
-  labs(title = "Filière de production dominante par région", fill = "Catégorie") +
-  theme_minimal() +
+  labs(title = "Dominant production category by region", fill = "Category") +
   theme(axis.text = element_blank(), axis.ticks = element_blank())
 ```
 
-### Coverage rate by region
+```{r}
+#| label: map-stats
+#| include: false
+
+regions_nuc <- region_profile |> filter(category == "Nuclear")   |> pull(region)
+regions_ren <- region_profile |> filter(category == "Renewable") |> pull(region)
+regions_fos <- region_profile |> filter(category == "Fossil")    |> pull(region)
+```
+
+Nuclear leads in `r fmt_list(regions_nuc)`. Renewables lead in
+`r fmt_list(regions_ren)`, and fossil thermal in `r fmt_list(regions_fos)`.
+
+**In short**, regional mixes are far from uniform: the leading source's share
+ranges from `r fmt_pct(min(region_profile$share_pct))` to
+`r fmt_pct(max(region_profile$share_pct))` across regions, and nuclear is the
+leading source in `r n_nuc` of `r n_reg` of them.
+
+## Coverage rate by region
+
+The second question is whether each region covers its own consumption. The
+**coverage rate** is a region's total production divided by its consumption, so a
+value above 100 % means the region produces more than it consumes.
+@fig-map-coverage colours each region on that scale: green for surplus, red for
+deficit and beige near balance.
 
 ```{r}
-#| label: taux-couverture-par-region
+#| label: coverage-rate
 
-taux_couverture_region <- ds_clean |> 
-  mutate(
-    prod_totale = rowSums(across(c(thermique_mw, nucleaire_mw, eolien_mw, solaire_mw, 
-                                     hydraulique_mw, bioenergies_mw)), na.rm = TRUE)
-  ) |> 
+coverage_by_region <- ds_clean |> 
+  mutate(total_prod = rowSums(across(all_of(source_cols)), na.rm = TRUE)) |> 
   group_by(region) |> 
   summarise(
-    taux_couverture = sum(prod_totale, na.rm = TRUE) / sum(consommation_mw, na.rm = TRUE) * 100,
+    coverage_rate = sum(total_prod, na.rm = TRUE) / sum(consumption_mw, na.rm = TRUE) * 100,
     .groups = "drop"
   )
 
-taux_couverture_region |> arrange(desc(taux_couverture))
+map_coverage <- regions_geo |> 
+  filter(nom %in% coverage_by_region$region) |> 
+  left_join(coverage_by_region, by = c("nom" = "region"))
+
+# Figures quoted in the text
+cov_top3 <- coverage_by_region |> 
+  slice_max(coverage_rate, n = 3, with_ties = FALSE) |> 
+  mutate(txt = paste0(region, " (", round(coverage_rate), " %)")) |> pull(txt)
+cov_bottom3 <- coverage_by_region |> 
+  slice_min(coverage_rate, n = 3, with_ties = FALSE) |> 
+  mutate(txt = paste0(region, " (", round(coverage_rate), " %)")) |> pull(txt)
+n_surplus <- sum(coverage_by_region$coverage_rate > 100)
+
+national_cov <- ds_clean |> 
+  summarise(
+    prod = sum(rowSums(across(all_of(source_cols)), na.rm = TRUE)),
+    cons = sum(consumption_mw, na.rm = TRUE)
+  ) |> 
+  mutate(rate = prod / cons * 100) |> pull(rate)
 ```
 
-
 ```{r}
-#| label: viz-carte-taux-couverture
+#| label: fig-map-coverage
+#| fig-cap: "Production/consumption coverage rate by region (%). Green: surplus, red: deficit."
 
-carte_couverture |> 
-  ggplot(aes(fill = taux_couverture)) +
+map_coverage |> 
+  ggplot(aes(fill = coverage_rate)) +
   geom_sf(color = "white", linewidth = 0.5) +
   scale_fill_gradient2(
     midpoint = 100, 
-    low = "#B22222",      # rouge brique (déficitaire)
-    mid = "#F5DEB3",      # beige clair au lieu de blanc pur (équilibre)
-    high = "#1B5E20",     # vert foncé (excédentaire) 
+    low = "#B22222",      # brick red (deficit)
+    mid = "#F5DEB3",      # light beige (balance)
+    high = "#1B5E20",     # dark green (surplus)
     na.value = "grey85"
   ) +
-  labs(title = "Taux de couverture production/consommation par région (%)",
-       fill = "Taux de\ncouverture") +
-  theme_minimal() +
+  labs(title = "Production/consumption coverage rate by region (%)",
+       fill = "Coverage\nrate") +
   theme(axis.text = element_blank(), axis.ticks = element_blank())
 ```
 
-### Saisonality
+The most surplus regions are `r fmt_list(cov_top3)`, while the most deficit are
+`r fmt_list(cov_bottom3)`. Only **`r n_surplus` of `r nrow(coverage_by_region)`
+regions** produce more than they consume, and all regions together produce
+`r fmt_pct(national_cov)` of what they consume.
+
+**In short**, coverage is very unequal, from
+`r fmt_pct(min(coverage_by_region$coverage_rate))` to
+`r fmt_pct(max(coverage_by_region$coverage_rate))`: regions below 100 % must rely
+on exchanges with the others.
+
+## Seasonality
+
+The third question is whether the mix changes over time. We first look at seasons,
+defined as meteorological seasons (winter: December to February, spring: March to
+May, summer: June to August, autumn: September to November).
+@fig-season-mix shows the share of each source in national production for each
+season, all regions and years pooled.
 
 ```{r}
-#| label: ajout-saison
+#| label: add-season
 
 ds_clean <- ds_clean |> 
   mutate(
-    mois = lubridate::month(date),
-    saison = case_when(
-      mois %in% c(12, 1, 2)  ~ "Hiver",
-      mois %in% c(3, 4, 5)   ~ "Printemps",
-      mois %in% c(6, 7, 8)   ~ "Été",
-      mois %in% c(9, 10, 11) ~ "Automne"
+    month = lubridate::month(date),
+    season = case_when(
+      month %in% c(12, 1, 2)  ~ "Winter",
+      month %in% c(3, 4, 5)   ~ "Spring",
+      month %in% c(6, 7, 8)   ~ "Summer",
+      month %in% c(9, 10, 11) ~ "Autumn"
     ),
-    saison = factor(saison, levels = c("Hiver", "Printemps", "Été", "Automne"))
+    season = factor(season, levels = c("Winter", "Spring", "Summer", "Autumn"))
   )
-```
 
-```{r}
-#| label: mix-par-saison-national
-
-mix_saison <- ds_clean |> 
-  select(saison, thermique_mw, nucleaire_mw, eolien_mw, solaire_mw, 
-         hydraulique_mw, bioenergies_mw) |> 
-  pivot_longer(-saison, names_to = "filiere", values_to = "mw") |> 
-  group_by(saison, filiere) |> 
-  summarise(prod_totale = sum(mw, na.rm = TRUE), .groups = "drop_last") |> 
-  mutate(part_pct = prod_totale / sum(prod_totale) * 100) |> 
+season_mix <- ds_clean |> 
+  select(season, all_of(source_cols)) |> 
+  pivot_longer(-season, names_to = "energy_source", values_to = "mw") |> 
+  group_by(season, energy_source) |> 
+  summarise(total_prod = sum(mw, na.rm = TRUE), .groups = "drop_last") |> 
+  mutate(share_pct = total_prod / sum(total_prod) * 100) |> 
   ungroup()
 
-mix_saison
-```
-```{r}
-#| label: viz-mix-par-saison
+region_season_mix <- ds_clean |> 
+  select(region, season, all_of(source_cols)) |> 
+  pivot_longer(-c(region, season), names_to = "energy_source", values_to = "mw") |> 
+  group_by(region, season, energy_source) |> 
+  summarise(total_prod = sum(mw, na.rm = TRUE), .groups = "drop_last") |> 
+  mutate(share_pct = total_prod / sum(total_prod) * 100) |> 
+  ungroup()
 
-mix_saison |> 
-  ggplot(aes(x = saison, y = part_pct, fill = filiere)) +
+region_season_profile <- region_season_mix |> 
+  group_by(region, season) |> 
+  slice_max(share_pct, n = 1, with_ties = FALSE) |> 
+  ungroup()
+
+# Figures quoted in the text: season of highest and lowest share of each source
+season_range <- season_mix |> 
+  group_by(energy_source) |> 
+  summarise(
+    peak_season = as.character(season[which.max(share_pct)]),
+    peak_share  = max(share_pct),
+    low_season  = as.character(season[which.min(share_pct)]),
+    low_share   = min(share_pct),
+    swing       = max(share_pct) - min(share_pct),
+    .groups = "drop"
+  )
+
+season_txt <- function(src) {
+  r <- season_range |> filter(energy_source == src)
+  sprintf("%s: highest in %s (%.1f %%), lowest in %s (%.1f %%)",
+          source_labels[[src]], r$peak_season, r$peak_share, r$low_season, r$low_share)
+}
+
+biggest_swing <- season_range |> slice_max(swing, n = 1, with_ties = FALSE)
+```
+
+```{r}
+#| label: fig-season-mix
+#| fig-cap: "National production mix by season (share of each source, %)."
+
+season_mix |> 
+  ggplot(aes(x = season, y = share_pct, fill = energy_source)) +
   geom_col() +
-  scale_fill_manual(values = couleurs_filieres, na.value = "grey85") +
-  labs(title = "Répartition du mix de production par saison (national)",
-       x = NULL, y = "Part (%)", fill = "Filière") +
-  theme_minimal()
-```
-```{r}
-#| label: mix-region-saison
-
-mix_region_saison <- ds_clean |> 
-  select(region, saison, thermique_mw, nucleaire_mw, eolien_mw, solaire_mw, 
-         hydraulique_mw, bioenergies_mw) |> 
-  pivot_longer(-c(region, saison), names_to = "filiere", values_to = "mw") |> 
-  group_by(region, saison, filiere) |> 
-  summarise(prod_totale = sum(mw, na.rm = TRUE), .groups = "drop_last") |> 
-  mutate(part_pct = prod_totale / sum(prod_totale) * 100) |> 
-  ungroup()
-
-mix_region_saison
-```
-```{r}
-#| label: filiere-dominante-region-saison
-
-profil_region_saison <- mix_region_saison |> 
-  group_by(region, saison) |> 
-  slice_max(part_pct, n = 1) |> 
-  ungroup()
-
-profil_region_saison
+  scale_fill_manual(values = source_colors, labels = source_labels, na.value = "grey85") +
+  labs(title = "Production mix by season (national)",
+       x = NULL, y = "Share (%)", fill = "Source")
 ```
 
-```{r}
-#| label: viz-heatmap-region-saison
+By source, the seasonal pattern reads as follows:
 
-profil_region_saison |> 
-  ggplot(aes(x = saison, y = region, fill = filiere)) +
+- `r season_txt("nuclear_mw")`
+- `r season_txt("thermal_mw")`
+- `r season_txt("hydro_mw")`
+- `r season_txt("wind_mw")`
+- `r season_txt("solar_mw")`
+- `r season_txt("bioenergy_mw")`
+
+The national picture hides regional differences. @fig-heatmap-region-season shows,
+for each region and season, which source leads: a row with a single colour means
+the profile does not change over the year.
+
+```{r}
+#| label: fig-heatmap-region-season
+#| fig-cap: "Dominant source by region and season."
+#| fig-height: 6
+
+region_season_profile |> 
+  ggplot(aes(x = season, y = region, fill = energy_source)) +
   geom_tile(color = "white", linewidth = 0.5) +
-  scale_fill_manual(values = couleurs_filieres, na.value = "grey85") +
-  labs(title = "Filière dominante par région et par saison",
-       x = NULL, y = NULL, fill = "Filière") +
-  theme_minimal()
+  scale_fill_manual(values = source_colors, labels = source_labels, na.value = "grey85") +
+  labs(title = "Dominant source by region and season",
+       x = NULL, y = NULL, fill = "Source")
 ```
-```{r}
-#| label: viz-barres-empilees-region-saison
 
-mix_region_saison |> 
-  ggplot(aes(x = saison, y = part_pct, fill = filiere)) +
+```{r}
+#| label: season-switch-stats
+#| include: false
+
+season_switch <- region_season_profile |> 
+  group_by(region) |> 
+  summarise(n_dominant = n_distinct(energy_source), .groups = "drop")
+
+n_stable  <- sum(season_switch$n_dominant == 1)
+switchers <- season_switch |> filter(n_dominant > 1) |> pull(region)
+```
+
+The same source leads in all four seasons in **`r n_stable` of
+`r nrow(season_switch)` regions**. The leading source changes with the season in
+`r length(switchers)` region(s): `r fmt_list(switchers)`.
+
+@fig-facet-region-season gives the exact shares behind this map, region by region.
+
+```{r}
+#| label: fig-facet-region-season
+#| fig-cap: "Production mix by region and season (share of each source, %)."
+#| fig-height: 8
+#| fig-width: 9
+
+region_season_mix |> 
+  ggplot(aes(x = season, y = share_pct, fill = energy_source)) +
   geom_col() +
   facet_wrap(~region) +
-  scale_fill_manual(values = couleurs_filieres, na.value = "grey85") +
-  labs(title = "Mix de production par région et par saison",
-       x = NULL, y = "Part (%)", fill = "Filière") +
-  theme_minimal() +
+  scale_fill_manual(values = source_colors, labels = source_labels, na.value = "grey85") +
+  labs(title = "Production mix by region and season",
+       x = NULL, y = "Share (%)", fill = "Source") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
-### Mensual production
 ```{r}
-#| label: prod-mensuelle-nationale-corrigee
+#| label: renewable-swing-stats
+#| include: false
 
-prod_mensuelle <- ds_clean |> 
-  mutate(mois_annee = floor_date(date, "month")) |> 
-  select(mois_annee, date_heure, thermique_mw, nucleaire_mw, eolien_mw, solaire_mw, 
-         hydraulique_mw, bioenergies_mw) |> 
-  pivot_longer(-c(mois_annee, date_heure), names_to = "filiere", values_to = "mw") |> 
-  group_by(mois_annee, date_heure, filiere) |> 
-  summarise(prod_nationale_instant = sum(mw, na.rm = TRUE), .groups = "drop_last") |> 
-  group_by(mois_annee, filiere) |> 
-  summarise(prod_moyenne_mw = mean(prod_nationale_instant, na.rm = TRUE), .groups = "drop")
+ren_swing <- region_season_mix |> 
+  filter(energy_source %in% renewable_cols) |> 
+  group_by(region, season) |> 
+  summarise(ren_share = sum(share_pct), .groups = "drop") |> 
+  group_by(region) |> 
+  summarise(
+    swing       = max(ren_share) - min(ren_share),
+    peak_season = as.character(season[which.max(ren_share)]),
+    .groups = "drop"
+  )
 
-prod_mensuelle
+swing_max <- ren_swing |> slice_max(swing, n = 1, with_ties = FALSE)
+swing_min <- ren_swing |> slice_min(swing, n = 1, with_ties = FALSE)
+```
+
+The combined renewable share varies most across seasons in `r swing_max$region`
+(a swing of `r round(swing_max$swing, 1)` percentage points, highest in
+`r swing_max$peak_season`) and least in `r swing_min$region`
+(`r round(swing_min$swing, 1)` points).
+
+**In short**, the seasonal effect is real but moderate at national scale: the
+largest swing is for `r source_labels[[biggest_swing$energy_source]]`
+(`r round(biggest_swing$swing, 1)` percentage points between its highest and lowest
+season), and it differs strongly between regions.
+
+## Monthly production over time
+
+The last time dimension is the full period. For each instant, national production
+is the sum over regions; it is then averaged by month. Rows without a valid
+timestamp (clock changes) are excluded, otherwise they would be wrongly grouped
+into a single "instant". @fig-area-absolute shows the resulting level of
+production, and @fig-area-share the same data as shares of the total.
+
+```{r}
+#| label: monthly-production
+
+monthly_prod <- ds_clean |> 
+  filter(!is.na(datetime_utc)) |> 
+  mutate(year_month = floor_date(date, "month")) |> 
+  select(year_month, datetime_utc, all_of(source_cols)) |> 
+  pivot_longer(-c(year_month, datetime_utc), names_to = "energy_source", values_to = "mw") |> 
+  group_by(year_month, datetime_utc, energy_source) |> 
+  summarise(national_prod = sum(mw, na.rm = TRUE), .groups = "drop_last") |> 
+  group_by(year_month, energy_source) |> 
+  summarise(mean_prod_mw = mean(national_prod, na.rm = TRUE), .groups = "drop") |> 
+  mutate(energy_source = factor(energy_source, levels = source_cols))
+
+# Figures quoted in the text
+monthly_total <- monthly_prod |> 
+  group_by(year_month) |> 
+  summarise(total = sum(mean_prod_mw), .groups = "drop")
+tot_max <- monthly_total |> slice_max(total, n = 1, with_ties = FALSE)
+tot_min <- monthly_total |> slice_min(total, n = 1, with_ties = FALSE)
+
+monthly_ren <- monthly_prod |> 
+  group_by(year_month) |> 
+  summarise(
+    ren_pct = sum(mean_prod_mw[energy_source %in% renewable_cols]) / sum(mean_prod_mw) * 100,
+    .groups = "drop"
+  )
+ren_peak <- monthly_ren |> slice_max(ren_pct, n = 1, with_ties = FALSE)
+ren_low  <- monthly_ren |> slice_min(ren_pct, n = 1, with_ties = FALSE)
+
+renewable_share <- monthly_prod |> 
+  mutate(
+    year = lubridate::year(year_month),
+    is_renewable = energy_source %in% renewable_cols
+  ) |> 
+  group_by(year) |> 
+  summarise(renewable_pct = sum(mean_prod_mw[is_renewable]) / sum(mean_prod_mw) * 100,
+            .groups = "drop")
+ren_start <- renewable_share |> slice_min(year, n = 1, with_ties = FALSE)
+ren_end   <- renewable_share |> slice_max(year, n = 1, with_ties = FALSE)
 ```
 
 ```{r}
-#| label: ordre-filieres
+#| label: fig-area-absolute
+#| fig-cap: "Monthly national production mix, in absolute values (MW, monthly average)."
 
-ordre_filieres <- c("thermique_mw", "nucleaire_mw", "hydraulique_mw", 
-                     "eolien_mw", "solaire_mw", "bioenergies_mw")
-
-prod_mensuelle <- prod_mensuelle |> 
-  mutate(filiere = factor(filiere, levels = ordre_filieres))
-```
-
-```{r}
-#| label: viz-aires-empilees-absolu
-
-prod_mensuelle |> 
-  ggplot(aes(x = mois_annee, y = prod_moyenne_mw, fill = filiere)) +
+monthly_prod |> 
+  ggplot(aes(x = year_month, y = mean_prod_mw, fill = energy_source)) +
   geom_area() +
-  scale_fill_manual(values = couleurs_filieres, na.value = "grey85") +
-  labs(title = "Évolution du mix de production national (valeurs absolues)",
-       x = NULL, y = "Production moyenne (MW)", fill = "Filière") +
-  theme_minimal() +
+  scale_fill_manual(values = source_colors, labels = source_labels, na.value = "grey85") +
+  labs(title = "National production mix over time (absolute values)",
+       x = NULL, y = "Average production (MW)", fill = "Source") +
   guides(fill = guide_legend(reverse = TRUE))
 ```
 
-```{r}
-#| label: viz-aires-empilees-pourcentage
+Average national production peaks in `r fmt_month(tot_max$year_month)`
+(`r fmt_mw(tot_max$total)`) and is lowest in `r fmt_month(tot_min$year_month)`
+(`r fmt_mw(tot_min$total)`).
 
-prod_mensuelle |> 
-  group_by(mois_annee) |> 
-  mutate(part_pct = prod_moyenne_mw / sum(prod_moyenne_mw, na.rm = TRUE) * 100) |> 
+```{r}
+#| label: fig-area-share
+#| fig-cap: "Monthly national production mix, as a share of the total (%)."
+
+monthly_prod |> 
+  group_by(year_month) |> 
+  mutate(share_pct = mean_prod_mw / sum(mean_prod_mw, na.rm = TRUE) * 100) |> 
   ungroup() |> 
-  ggplot(aes(x = mois_annee, y = part_pct, fill = filiere)) +
+  ggplot(aes(x = year_month, y = share_pct, fill = energy_source)) +
   geom_area() +
-  scale_fill_manual(values = couleurs_filieres, na.value = "grey85") +
-  labs(title = "Évolution du mix de production national (en % du total)",
-       x = NULL, y = "Part (%)", fill = "Filière") +
-  theme_minimal()
+  scale_fill_manual(values = source_colors, labels = source_labels, na.value = "grey85") +
+  labs(title = "National production mix over time (% of total)",
+       x = NULL, y = "Share (%)", fill = "Source")
+```
+
+The renewable share of production goes from `r fmt_pct(ren_start$renewable_pct)`
+in `r ren_start$year` to `r fmt_pct(ren_end$renewable_pct)` in `r ren_end$year`
+(the first and last years of the period, possibly incomplete). Month by month, it
+peaks at `r fmt_pct(ren_peak$ren_pct)` in `r fmt_month(ren_peak$year_month)` and
+falls to `r fmt_pct(ren_low$ren_pct)` in `r fmt_month(ren_low$year_month)`.
+
+**In short**, production is far from constant over time and the renewable share
+moves widely from one month to the next, so any comparison of two periods should
+use matching months or full years.
+
+## Exchanges between regions
+
+The last question concerns exchanges. `physical_exchanges_mw` is a region's balance
+of physical exchanges with the others; we assume the usual RTE convention (negative
+means export, positive means import) and test it below.
+@fig-exchange-balance shows each region's mean balance, in green for net exporters
+and red for net importers.
+
+```{r}
+#| label: exchange-balance
+
+exchange_balance <- ds_clean |> 
+  group_by(region) |> 
+  summarise(mean_exchange_mw = mean(physical_exchanges_mw, na.rm = TRUE), .groups = "drop") |> 
+  arrange(mean_exchange_mw)
+
+# Figures quoted in the text
+n_importers <- sum(exchange_balance$mean_exchange_mw > 0)
+n_exporters <- sum(exchange_balance$mean_exchange_mw <= 0)
+top_exporter <- exchange_balance |> slice_min(mean_exchange_mw, n = 1, with_ties = FALSE)
+top_importer <- exchange_balance |> slice_max(mean_exchange_mw, n = 1, with_ties = FALSE)
+
+cov_vs_exchange <- coverage_by_region |> inner_join(exchange_balance, by = "region")
+r_cov_exchange  <- cor(cov_vs_exchange$coverage_rate, cov_vs_exchange$mean_exchange_mw,
+                       use = "complete.obs")
 ```
 
 ```{r}
+#| label: fig-exchange-balance
+#| fig-cap: "Mean balance of physical exchanges by region (MW). Green: net exporter, red: net importer."
+#| fig-height: 5
 
+exchange_balance |> 
+  ggplot(aes(x = reorder(region, mean_exchange_mw), y = mean_exchange_mw)) +
+  geom_col(aes(fill = mean_exchange_mw > 0)) +
+  scale_fill_manual(values = c("TRUE" = "#B22222", "FALSE" = "#1B5E20"),
+                     labels = c("TRUE" = "Net importer", "FALSE" = "Net exporter"),
+                     name = NULL) +
+  coord_flip() +
+  labs(title = "Mean balance of physical exchanges by region",
+       x = NULL, y = "Mean balance (MW)")
 ```
+
+**`r n_importers` regions** are net importers and **`r n_exporters`** net
+exporters. The largest exporter is `r top_exporter$region`
+(`r fmt_mw(top_exporter$mean_exchange_mw)`) and the largest importer is
+`r top_importer$region` (`r fmt_mw(top_importer$mean_exchange_mw)`). Across
+regions, the correlation between coverage rate and mean exchange balance is
+`r round(r_cov_exchange, 2)`, which `r if (r_cov_exchange < 0) "is consistent with" else "contradicts"`
+the assumed convention (a more surplus region should export more, hence a more
+negative balance).
+
+Finally, do regions with nuclear power use less thermal and export more?
+@tbl-nuclear-comparison compares the two groups of regions.
 
 ```{r}
+#| label: tbl-nuclear-comparison
+#| tbl-cap: "Mean thermal production, exchange balance and consumption, for regions with and without nuclear power (MW)."
 
+nuclear_regions <- ds_clean |> 
+  group_by(region) |> 
+  summarise(has_nuclear = any(!is.na(nuclear_mw) & nuclear_mw > 0), .groups = "drop")
+
+nuclear_comparison <- ds_clean |> 
+  left_join(nuclear_regions, by = "region") |> 
+  group_by(has_nuclear) |> 
+  summarise(
+    mean_thermal_mw     = mean(thermal_mw, na.rm = TRUE),
+    mean_exchange_mw    = mean(physical_exchanges_mw, na.rm = TRUE),
+    mean_consumption_mw = mean(consumption_mw, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+with_nuc    <- nuclear_comparison |> filter(has_nuclear)
+without_nuc <- nuclear_comparison |> filter(!has_nuclear)
+n_nuclear_regions <- sum(nuclear_regions$has_nuclear)
+
+nuclear_comparison |> 
+  mutate(has_nuclear = if_else(has_nuclear, "With nuclear", "Without nuclear")) |> 
+  knitr::kable(
+    col.names = c("Regions", "Thermal production", "Exchange balance", "Consumption"),
+    digits = 0,
+    format.args = list(big.mark = ","),
+    align = c("l", "r", "r", "r")
+  )
 ```
 
-```{r}
+`r n_nuclear_regions` regions have nuclear production. Their mean thermal
+production is `r fmt_mw(with_nuc$mean_thermal_mw)` against
+`r fmt_mw(without_nuc$mean_thermal_mw)` elsewhere, and their mean exchange balance
+is `r fmt_mw(with_nuc$mean_exchange_mw)` against
+`r fmt_mw(without_nuc$mean_exchange_mw)`. The comparison is purely descriptive:
+the two groups also differ in size and consumption (`r fmt_mw(with_nuc$mean_consumption_mw)`
+against `r fmt_mw(without_nuc$mean_consumption_mw)`), so these gaps do not establish
+a causal link.
 
-```
+**In short**, regions are split between a few net exporters and many net importers,
+and the comparison above shows how nuclear and non-nuclear regions differ on
+thermal use and exchanges, without proving why.
 
-```{r}
+# Conclusion
 
-```
+- **Contrasted mixes.** The leading source of a region supplies between
+  `r fmt_pct(min(region_profile$share_pct))` and
+  `r fmt_pct(max(region_profile$share_pct))` of its production, and nuclear leads in
+  `r n_nuc` of `r n_reg` regions.
+- **Unequal coverage.** Only `r n_surplus` of `r nrow(coverage_by_region)` regions
+  produce more than they consume, and the exchange balance is consistent with it
+  (correlation of `r round(r_cov_exchange, 2)` with the coverage rate).
+- **Seasonal and long-term variation.** The largest seasonal swing at national
+  scale is for `r source_labels[[biggest_swing$energy_source]]`, and the renewable
+  share goes from `r fmt_pct(ren_start$renewable_pct)` to
+  `r fmt_pct(ren_end$renewable_pct)` between the first and last years of the data.
+- **Nuclear and thermal.** Regions with nuclear power differ from the others in
+  thermal production and exchanges, but this comparison is only descriptive.
 
-```{r}
-
-```
-
-```{r}
-
-```
-## Findings
-
-<!-- TODO: what did you learn? This is your discussion: put your findings and
-the original question back into perspective. Keep it honest: say what you
-found, and what you did NOT find. -->
-
----
-
-*This chapter is your semester's centrepiece. Revisit it as you learn new
-techniques and make it your best work by the final gallery walk.*
+**Limits.** The analysis is exploratory and descriptive, with no causal claim. The
+local/UTC time offset is not corrected for intraday analysis, the incomplete `tco`
+and `tch` columns are not used, and overseas regions are absent from the data.

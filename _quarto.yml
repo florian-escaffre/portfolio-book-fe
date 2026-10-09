@@ -21,6 +21,9 @@ book:
 
 bibliography: references.bib
 
+crossref:
+  chapters: false
+
 format:
   html:
     # Base theme: `cosmo` is just a starting point. Your personal style lives
