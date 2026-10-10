@@ -2,16 +2,13 @@ project:
   type: book
 
 book:
-  title: "My Data Science Portfolio"
-  # TODO: put your name / a short subtitle. This is the cover of your portfolio.
-  author: "Your Name"
+  title: "Data Science Portfolio"
+  subtitle: "Master's in Smart Data Science, ENSAI · 2026–2027"
+  author: "Florian Escaffre"
   date: today
 
-  # The ordered list of chapters in the book. Chapter files live in chapters/.
-  # The first chapter (01-EDA.qmd) is YOUR EDA project, sourced by code from an
-  # open-data portal of your choice (see the session-2 lab). The later chapters
-  # are placeholders that other courses will fill in over the semester; leave
-  # them in place so the book keeps growing.
+  # Ordered list of chapters (files live in chapters/). Chapters 2 and 3 are
+  # placeholders, filled in as the year goes on.
   chapters:
     - index.qmd
     - chapters/01-EDA.qmd

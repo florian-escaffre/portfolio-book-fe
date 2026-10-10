@@ -1,48 +1,26 @@
 ---
-# The book's home page. Edit the title/subtitle/description to introduce
-# yourself and what this portfolio contains.
-title: "My Data Science Portfolio"
+title: "Data Science Portfolio"
 author: "Florian Escaffre"
 date: today
 ---
 
-```{r}
-#| include: false
-# Package setup lives in one shared chunk so every chapter starts from a
-# consistent environment. Add libraries you use across the book here.
-library(tidyverse)
-```
+## About me
 
-## Welcome 👋
+I am an electrical and electronics engineer (ENSEEIHT, Toulouse INP) currently
+studying for a Master's degree in Smart Data Science at ENSAI. I enjoy using data and AI
+to solve concrete problems, with an engineer's focus on rigour and reproducibility.
 
-This is **your** data science portfolio. Over the semester it will grow from a
-single exploratory data analysis (EDA) project into a collection of
-reproducible analyses, each versioned with git, with dependencies pinned via
-renv/uv, and published to a URL on Posit Connect.
+## About this portfolio
 
-The chapters in this book are:
+This book gathers the projects I build during the 2026–2027 academic year of the
+Master's programme. Each chapter is a self-contained analysis, compiled from source
+with Quarto, versioned with git and run in a pinned environment, so that every
+result can be reproduced.
 
-- **Chapter 1, EDA project**: your first real analysis, sourcing a dataset
-  you care about by code from an open-data portal (data.gouv.fr, or your own
-  country's) and (optionally) pinning it with `{pins}`.
-- **Chapters 2 & 3, later courses**: placeholders that other instructors will
-  fill in over the semester. Leave them in place.
+## Contents
 
-## How to use this scaffold
-
-This folder is a *starter book*: copy it into your own workspace and make it
-yours. See [`README.md`](README.md) for the full walkthrough.
-
-```{r}
-#| label: fig-eda-sneak-peek
-#| fig-cap: "A first glimpse of your data. Replace this figure with your EDA output."
-# A tiny placeholder plot so the book renders before you add your own analysis.
-ggplot(data.frame(x = rnorm(200), y = rnorm(200)), aes(x, y)) +
-  geom_point(alpha = 0.4, colour = "#2E7D6B") +
-  labs(x = "your variable", y = "your other variable")
-```
-
-The book is **language-agnostic**: Chapter 1 uses R, but later chapters could
-just as easily use Python. What makes it reproducible is the pipeline around
-it: data sourced reproducibly, code that renders from source, dependencies
-pinned, everything under version control.
+- **Chapter 1, Exploratory data analysis**: electricity production, consumption and
+  exchanges across French regions, using RTE's éCO2mix open data.
+- **Chapters 2 and 3**: projects from the following semesters, added as the year
+  goes on.
+- **References**: the bibliography cited across the chapters.
