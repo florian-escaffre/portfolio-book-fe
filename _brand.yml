@@ -1,54 +1,60 @@
-# ─── Your portfolio's brand ────────────────────────────────────────────────
-# This file is a Quarto `_brand.yml`: edit the colours/fonts below and the
-# whole book restyles on the next render. It is a *placeholder* — a sensible
-# starting seed (the ENSAI course palette). Make it yours: pick colours you
-# like, swap the fonts, and the book will feel like *your* portfolio, not the
-# course materials.
-#
-#   Quarto auto-discovers `_brand.yml` sitting next to `_quarto.yml`, so no
-#   wiring is needed to use it. For deeper control (spacing, layout, custom
-#   components) see `styles.scss` — the two work together; `_brand.yml` drives
-#   the palette/typography, `styles.scss` anything CSS-like on top.
-#
-# Colours: palette holds named colours; the semantic slots (primary,
-# foreground, background, …) pick which ones mean what. Any `"#hex"` is fair
-# game. Rule of thumb — keep ~3 accents + one ink + one paper.
+# _brand.yml: portfolio visual identity (soft palette, cream background)
+# Quarto picks it up automatically when it sits next to _quarto.yml.
 
 color:
   palette:
-    teal:    "#2E7D6B"   # primary accent (assignments / structure)
-    amber:   "#E8A33D"   # secondary accent (highlights / results)
-    indigo:  "#4A5899"   # tertiary accent (links / emphasis)
-    ink:     "#17251F"   # near-black ink for body text
-    paper:   "#F1EEE6"   # warm off-white paper for the page
-    white:   "#FFFFFF"
-  primary: teal
-  secondary: amber
-  tertiary: indigo
+    # Backgrounds
+    paper:      "#FBFBF9"   # near-white off-white (page background)
+    paper-deep: "#F3F3F0"   # slightly deeper off-white (code blocks, callouts)
+    white:      "#FFFFFF"
+    # Text
+    ink:        "#2B3A36"   # very dark green-grey, softer than pure black
+    ink-soft:   "#6B7A75"   # secondary text
+    # Pastel accents
+    sage:       "#5E9C8E"   # soft sage / teal (primary accent)
+    apricot:    "#E9BE7A"   # apricot (highlights)
+    periwinkle: "#5F6DAE"   # muted periwinkle blue (links)
+    rose:       "#D98C8C"   # dusty rose (soft alerts)
+    mint:       "#8CCBB1"   # mint (success only)
+  primary: sage
+  secondary: sage
+  tertiary: periwinkle
+  success: mint
+  info: periwinkle
+  warning: apricot
+  danger: rose
+  light: paper-deep
+  dark: ink
   foreground: ink
   background: paper
+  link: periwinkle
 
-# Typography: swap the fonts for ones you like (Google Fonts via `source:
-# google`, or drop `source:` for the browser defaults). `monospace` styles the
-# code blocks your EDA chapter is full of.
-#
-#   typography:
-#     fonts:
-#       - family: Lora        # example — uncomment to try
-#         source: google
-#         weight: [400, 600]
-#     base:
-#       family: Lora
-#     headings:
-#       family: Lora
-#       weight: 600
-#     monospace:
-#       family: "Fira Code"
-#       source: google
+typography:
+  fonts:
+    - family: Lora          # serif for headings
+      source: google
+      weight: [400, 600]
+    - family: Inter         # sans-serif for body text
+      source: google
+      weight: [400, 500, 600]
+    - family: Fira Code     # monospace for code blocks
+      source: google
+      weight: [400]
+  base:
+    family: Inter
+    size: 1rem
+    line-height: 1.7        # airy line spacing for readability
+  headings:
+    family: Lora
+    weight: 600
+    color: sage
+  monospace:
+    family: Fira Code
+    size: 0.9em
+    background-color: paper-deep
+  link:
+    color: periwinkle
 
-# Meta: identity that shows in the browser tab / share cards. Feel free to
-# trim or extend.
-#
-#   meta:
-#     name: My Data Science Portfolio
-#     link: https://example.com
+# Identity shown in the browser tab / share cards
+meta:
+  name: Portfolio Data Science
