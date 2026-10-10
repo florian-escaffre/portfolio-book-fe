@@ -21,6 +21,6 @@ result can be reproduced.
 
 - **Chapter 1, Exploratory data analysis**: electricity production, consumption and
   exchanges across French regions, using RTE's éCO2mix open data.
-- **Chapters 2 and 3**: projects from the following semesters, added as the year
+- **Chapters 2 and 3**: projects from the following semester, will be added as the year
   goes on.
 - **References**: the bibliography cited across the chapters.

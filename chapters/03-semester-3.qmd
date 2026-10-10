@@ -1,7 +1,7 @@
 ---
-title: "Chapter 3 · Semester 3"
+title: "Chapter 3"
 author: "Florian Escaffre"
 date: today
 ---
 
-*This chapter will be added during the third semester.*
+*This chapter will be added during the next semester.*
