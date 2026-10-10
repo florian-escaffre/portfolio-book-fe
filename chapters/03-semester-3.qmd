@@ -1,10 +1,7 @@
 ---
-title: "Chapter 3 · Third-semester course"
-author: "Your Name"
+title: "Chapter 3 · Semester 3"
+author: "Florian Escaffre"
 date: today
 ---
 
-<!-- Placeholder chapter.
-
-Like Chapter 2, this page is reserved for a later course. Keep it so your
-portfolio has room to grow over the semester. -->
+*This chapter will be added during the third semester.*
