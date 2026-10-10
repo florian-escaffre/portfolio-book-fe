@@ -7,7 +7,7 @@ ENSAI (2026–2027), written as a [Quarto](https://quarto.org) book.
 
 | Chapter | Content | Status |
 |---|---|---|
-| 1 · EDA | Electricity production, consumption and exchanges across French regions (RTE éCO2mix) | Done |
+| 1 · EDA | Exploratory Data Analysis of the electricity production, consumption and exchanges across French regions (RTE éCO2mix) | Done |
 | 2 · Semester 2 | To come | Placeholder |
 | 3 · Semester 3 | To come | Placeholder |
 
